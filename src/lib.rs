@@ -28,8 +28,6 @@ extern "Rust" {
     #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
     fn __rust_dealloc(ptr: *mut u8, size: usize, align: usize);
     #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
-    fn __rust_usable_size(layout: *const u8, min: *mut usize, max: *mut usize);
-    #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
     fn __rust_realloc(ptr: *mut u8,
                       old_size: usize,
                       old_align: usize,
@@ -73,16 +71,6 @@ unsafe impl Alloc for Heap {
     #[inline]
     unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
         __rust_dealloc(ptr, layout.size(), layout.align())
-    }
-
-    #[inline]
-    fn usable_size(&self, layout: Layout) -> (usize, usize) {
-        let mut min = 0;
-        let mut max = 0;
-        unsafe {
-            __rust_usable_size(&layout as *const Layout as *const u8, &mut min, &mut max);
-        }
-        (min, max)
     }
 
     #[inline]
