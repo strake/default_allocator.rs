@@ -39,19 +39,6 @@ extern "Rust" {
     #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
     fn __rust_alloc_zeroed(size: usize, align: usize, err: *mut u8) -> *mut u8;
     #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
-    fn __rust_alloc_excess(size: usize,
-                           align: usize,
-                           excess: *mut usize,
-                           err: *mut u8) -> *mut u8;
-    #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
-    fn __rust_realloc_excess(ptr: *mut u8,
-                             old_size: usize,
-                             old_align: usize,
-                             new_size: usize,
-                             new_align: usize,
-                             excess: *mut usize,
-                             err: *mut u8) -> *mut u8;
-    #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
     fn __rust_grow_in_place(ptr: *mut u8,
                             old_size: usize,
                             old_align: usize,
@@ -123,34 +110,6 @@ unsafe impl Alloc for Heap {
                                       layout.align(),
                                       &mut *err as *mut AllocErr as *mut u8);
         if ptr.is_null() { Err(ManuallyDrop::into_inner(err)) } else { Ok(ptr) }
-    }
-
-    #[inline]
-    unsafe fn alloc_excess(&mut self, layout: Layout) -> Result<Excess, AllocErr> {
-        let mut err = ManuallyDrop::new(mem::uninitialized::<AllocErr>());
-        let mut size = 0;
-        let ptr = __rust_alloc_excess(layout.size(),
-                                      layout.align(),
-                                      &mut size,
-                                      &mut *err as *mut AllocErr as *mut u8);
-        if ptr.is_null() { Err(ManuallyDrop::into_inner(err)) } else { Ok(Excess(ptr, size)) }
-    }
-
-    #[inline]
-    unsafe fn realloc_excess(&mut self,
-                             ptr: *mut u8,
-                             layout: Layout,
-                             new_layout: Layout) -> Result<Excess, AllocErr> {
-        let mut err = ManuallyDrop::new(mem::uninitialized::<AllocErr>());
-        let mut size = 0;
-        let ptr = __rust_realloc_excess(ptr,
-                                        layout.size(),
-                                        layout.align(),
-                                        new_layout.size(),
-                                        new_layout.align(),
-                                        &mut size,
-                                        &mut *err as *mut AllocErr as *mut u8);
-        if ptr.is_null() { Err(ManuallyDrop::into_inner(err)) } else { Ok(Excess(ptr, size)) }
     }
 
     #[inline]
