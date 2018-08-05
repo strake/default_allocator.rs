@@ -23,9 +23,6 @@ extern "Rust" {
     #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
     fn __rust_alloc(size: usize, align: usize, err: *mut u8) -> *mut u8;
     #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
-    #[cold]
-    fn __rust_oom(err: *const u8) -> !;
-    #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
     fn __rust_dealloc(ptr: *mut u8, size: usize, align: usize);
     #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
     fn __rust_realloc(ptr: *mut u8,
@@ -60,12 +57,6 @@ unsafe impl Alloc for Heap {
         let ptr =
             __rust_alloc(layout.size(), layout.align(), &mut *err as *mut AllocErr as *mut u8);
         if ptr.is_null() { Err(ManuallyDrop::into_inner(err)) } else { Ok(ptr) }
-    }
-
-    #[inline]
-    #[cold]
-    fn oom(&mut self, err: AllocErr) -> ! {
-        unsafe { __rust_oom(&err as *const AllocErr as *const u8) }
     }
 
     #[inline]
@@ -130,7 +121,7 @@ mod tests {
     fn allocate_zeroed() {
         unsafe {
             let layout = Layout::from_size_align(1024, 1).unwrap();
-            let ptr = Heap.alloc_zeroed(layout.clone()).unwrap_or_else(|e| Heap.oom(e));
+            let ptr = Heap.alloc_zeroed(layout.clone()).unwrap();
 
             let end = ptr.offset(layout.size() as isize);
             let mut i = ptr;
