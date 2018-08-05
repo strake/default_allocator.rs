@@ -21,18 +21,16 @@ pub use loca::*;
 
 extern "Rust" {
     #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
-    fn __rust_alloc(size: usize, align: usize, err: *mut u8) -> *mut u8;
+    fn __rust_alloc(size: usize, align: usize) -> *mut u8;
     #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
     fn __rust_dealloc(ptr: *mut u8, size: usize, align: usize);
     #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
     fn __rust_realloc(ptr: *mut u8,
                       old_size: usize,
-                      old_align: usize,
-                      new_size: usize,
-                      new_align: usize,
-                      err: *mut u8) -> *mut u8;
+                      align: usize,
+                      new_size: usize) -> *mut u8;
     #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
-    fn __rust_alloc_zeroed(size: usize, align: usize, err: *mut u8) -> *mut u8;
+    fn __rust_alloc_zeroed(size: usize, align: usize) -> *mut u8;
     #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
     fn __rust_grow_in_place(ptr: *mut u8,
                             old_size: usize,
@@ -53,10 +51,8 @@ pub struct Heap;
 unsafe impl Alloc for Heap {
     #[inline]
     unsafe fn alloc(&mut self, layout: Layout) -> Result<*mut u8, AllocErr> {
-        let mut err = ManuallyDrop::new(mem::uninitialized::<AllocErr>());
-        let ptr =
-            __rust_alloc(layout.size(), layout.align(), &mut *err as *mut AllocErr as *mut u8);
-        if ptr.is_null() { Err(ManuallyDrop::into_inner(err)) } else { Ok(ptr) }
+        let ptr = __rust_alloc(layout.size(), layout.align())
+        if ptr.is_null() { Err(AllocErr) } else { Ok(ptr) }
     }
 
     #[inline]
@@ -67,19 +63,8 @@ unsafe impl Alloc for Heap {
     #[inline]
     unsafe fn realloc(&mut self, ptr: *mut u8, layout: Layout, new_layout: Layout)
                       -> Result<*mut u8, AllocErr> {
-        let mut err = ManuallyDrop::new(mem::uninitialized::<AllocErr>());
-        let ptr = __rust_realloc(ptr,
-                                 layout.size(),
-                                 layout.align(),
-                                 new_layout.size(),
-                                 new_layout.align(),
-                                 &mut *err as *mut AllocErr as *mut u8);
-        if ptr.is_null() {
-            Err(ManuallyDrop::into_inner(err))
-        } else {
-            mem::forget(err);
-            Ok(ptr)
-        }
+        let ptr = __rust_realloc(ptr, layout.size(), layout.align(), new_layout.size());
+        if ptr.is_null() { Err(AllocErr) } else { Ok(ptr) }
     }
 
     #[inline]
