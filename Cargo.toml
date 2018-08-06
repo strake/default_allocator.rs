@@ -1,6 +1,6 @@
 [package]
 name = "default_allocator"
-version = "0.2.4"
+version = "0.3.0"
 authors = ["M Farkas-Dyck <strake888@gmail.com>"]
 description = "default (userspace) memory allocator"
 license = "MIT OR Apache-2.0"
