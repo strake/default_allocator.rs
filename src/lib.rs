@@ -14,8 +14,7 @@
 
 extern crate loca;
 
-use core::mem::{self, ManuallyDrop};
-use core::usize;
+use core::{ptr::NonNull, usize};
 
 pub use loca::*;
 
@@ -35,14 +34,12 @@ extern "Rust" {
     fn __rust_grow_in_place(ptr: *mut u8,
                             old_size: usize,
                             old_align: usize,
-                            new_size: usize,
-                            new_align: usize) -> u8;
+                            new_size: usize) -> u8;
     #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
     fn __rust_shrink_in_place(ptr: *mut u8,
                               old_size: usize,
                               old_align: usize,
-                              new_size: usize,
-                              new_align: usize) -> u8;
+                              new_size: usize) -> u8;
 }
 
 #[derive(Copy, Clone, Default, Debug)]
@@ -50,49 +47,37 @@ pub struct Heap;
 
 unsafe impl Alloc for Heap {
     #[inline]
-    unsafe fn alloc(&mut self, layout: Layout) -> Result<*mut u8, AllocErr> {
-        let ptr = __rust_alloc(layout.size(), layout.align())
-        if ptr.is_null() { Err(AllocErr) } else { Ok(ptr) }
+    unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+        NonNull::new(__rust_alloc(layout.size(), layout.align().get()))
+            .ok_or(AllocErr::Exhausted { request: layout })
     }
 
     #[inline]
-    unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
-        __rust_dealloc(ptr, layout.size(), layout.align())
+    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
+        __rust_dealloc(ptr.as_ptr(), layout.size(), layout.align().get())
     }
 
     #[inline]
-    unsafe fn realloc(&mut self, ptr: *mut u8, layout: Layout, new_layout: Layout)
-                      -> Result<*mut u8, AllocErr> {
-        let ptr = __rust_realloc(ptr, layout.size(), layout.align(), new_layout.size());
-        if ptr.is_null() { Err(AllocErr) } else { Ok(ptr) }
+    unsafe fn realloc(&mut self, ptr: NonNull<u8>, layout: Layout, new_size: usize)
+                      -> Result<NonNull<u8>, AllocErr> {
+        NonNull::new(__rust_realloc(ptr.as_ptr(), layout.size(), layout.align().get(), new_size))
+            .ok_or(AllocErr::Exhausted { request: layout })
     }
 
     #[inline]
-    unsafe fn alloc_zeroed(&mut self, layout: Layout) -> Result<*mut u8, AllocErr> {
-        let mut err = ManuallyDrop::new(mem::uninitialized::<AllocErr>());
-        let ptr = __rust_alloc_zeroed(layout.size(),
-                                      layout.align(),
-                                      &mut *err as *mut AllocErr as *mut u8);
-        if ptr.is_null() { Err(ManuallyDrop::into_inner(err)) } else { Ok(ptr) }
+    unsafe fn alloc_zeroed(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+        NonNull::new(__rust_alloc_zeroed(layout.size(), layout.align().get()))
+            .ok_or(AllocErr::Exhausted { request: layout })
     }
 
     #[inline]
-    unsafe fn resize_in_place(&mut self, ptr: *mut u8, layout: Layout, new_layout: Layout)
+    unsafe fn resize_in_place(&mut self, ptr: NonNull<u8>, layout: Layout, new_size: usize)
                               -> Result<(), CannotReallocInPlace> {
         use ::core::cmp::Ord;
         use ::core::cmp::Ordering::*;
-        debug_assert!(new_layout.align() == layout.align());
-        if 0 == match Ord::cmp(&new_layout.size(), &layout.size()) {
-            Greater => __rust_grow_in_place(ptr,
-                                            layout.size(),
-                                            layout.align(),
-                                            new_layout.size(),
-                                            new_layout.align()),
-            Less =>  __rust_shrink_in_place(ptr,
-                                            layout.size(),
-                                            layout.align(),
-                                            new_layout.size(),
-                                            new_layout.align()),
+        if 0 == match Ord::cmp(&new_size, &layout.size()) {
+            Greater => __rust_grow_in_place(ptr.as_ptr(), layout.size(), layout.align().get(), new_size),
+            Less  => __rust_shrink_in_place(ptr.as_ptr(), layout.size(), layout.align().get(), new_size),
             Equal => 1,
         } { Err(CannotReallocInPlace) } else { Ok(()) }
     }

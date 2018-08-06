@@ -6,4 +6,4 @@ description = "default (userspace) memory allocator"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-loca = "0.6"
+loca = "0.7"
