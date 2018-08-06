@@ -18,68 +18,33 @@ use core::{ptr::NonNull, usize};
 
 pub use loca::*;
 
-extern "Rust" {
-    #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
-    fn __rust_alloc(size: usize, align: usize) -> *mut u8;
-    #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
-    fn __rust_dealloc(ptr: *mut u8, size: usize, align: usize);
-    #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
-    fn __rust_realloc(ptr: *mut u8,
-                      old_size: usize,
-                      align: usize,
-                      new_size: usize) -> *mut u8;
-    #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
-    fn __rust_alloc_zeroed(size: usize, align: usize) -> *mut u8;
-    #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
-    fn __rust_grow_in_place(ptr: *mut u8,
-                            old_size: usize,
-                            old_align: usize,
-                            new_size: usize) -> u8;
-    #[cfg_attr(not(feature = "stable-rust"), rustc_allocator_nounwind)]
-    fn __rust_shrink_in_place(ptr: *mut u8,
-                              old_size: usize,
-                              old_align: usize,
-                              new_size: usize) -> u8;
-}
-
 #[derive(Copy, Clone, Default, Debug)]
 pub struct Heap;
+
+#[link(name = "c")]
+extern "C" {
+    fn aligned_alloc(align: usize, size: usize) -> *mut u8;
+    fn realloc(_: *mut u8, _: usize) -> *mut u8;
+    fn free(_: *mut u8);
+}
 
 unsafe impl Alloc for Heap {
     #[inline]
     unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
-        NonNull::new(__rust_alloc(layout.size(), layout.align().get()))
+        NonNull::new(aligned_alloc(layout.align().get(), layout.size()))
             .ok_or(AllocErr::Exhausted { request: layout })
     }
 
     #[inline]
-    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
-        __rust_dealloc(ptr.as_ptr(), layout.size(), layout.align().get())
+    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, _layout: Layout) {
+        free(ptr.as_ptr())
     }
 
     #[inline]
     unsafe fn realloc(&mut self, ptr: NonNull<u8>, layout: Layout, new_size: usize)
                       -> Result<NonNull<u8>, AllocErr> {
-        NonNull::new(__rust_realloc(ptr.as_ptr(), layout.size(), layout.align().get(), new_size))
+        NonNull::new(realloc(ptr.as_ptr(), new_size))
             .ok_or(AllocErr::Exhausted { request: layout })
-    }
-
-    #[inline]
-    unsafe fn alloc_zeroed(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
-        NonNull::new(__rust_alloc_zeroed(layout.size(), layout.align().get()))
-            .ok_or(AllocErr::Exhausted { request: layout })
-    }
-
-    #[inline]
-    unsafe fn resize_in_place(&mut self, ptr: NonNull<u8>, layout: Layout, new_size: usize)
-                              -> Result<(), CannotReallocInPlace> {
-        use ::core::cmp::Ord;
-        use ::core::cmp::Ordering::*;
-        if 0 == match Ord::cmp(&new_size, &layout.size()) {
-            Greater => __rust_grow_in_place(ptr.as_ptr(), layout.size(), layout.align().get(), new_size),
-            Less  => __rust_shrink_in_place(ptr.as_ptr(), layout.size(), layout.align().get(), new_size),
-            Equal => 1,
-        } { Err(CannotReallocInPlace) } else { Ok(()) }
     }
 }
 
